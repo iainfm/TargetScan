@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Image Zoom and Distance Measurement</title>
+    <style>
+        #container {
+            display: flex;
+            align-items: flex-start;
+        }
+        #imageContainer {
+            position: relative;
+            display: none; /* Initially hidden */
+        }
+        #zoomedImage {
+            position: absolute;
+            border: 1px solid black;
+            width: 200px;
+            height: 200px;
+            overflow: hidden;
+            display: none;
+        }
+        #zoomedImage img {
+            position: absolute;
+        }
+        #crosshairs {
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+        }
+        #crosshairs::before, #crosshairs::after {
+            content: '';
+            position: absolute;
+            background: red;
+        }
+        #crosshairs::before {
+            top: 50%;
+            left: 0;
+            width: 100%;
+            height: 1px;
+            transform: translateY(-50%);
+        }
+        #crosshairs::after {
+            top: 0;
+            left: 50%;
+            width: 1px;
+            height: 100%;
+            transform: translateX(-50%);
+        }
+        .marker {
+            position: absolute;
+            width: 10px;
+            height: 10px;
+            background: blue;
+            border-radius: 50%;
+            transform: translate(-50%, -50%);
+            pointer-events: none;
+        }
+        .marker.first {
+            background: red;
+        }
+        #infoContainer {
+            margin-left: 20px;
+        }
+        #resetButton {
+            display: none; /* Initially hidden */
+        }
+    </style>
+</head>
+<body>
+    <h1>Upload an Image to Zoom and Measure Distance</h1>
+    <input type="file" id="fileInput" accept="image/*">
+    <br><br>
+    <div id="container">
+        <div id="imageContainer">
+            <img id="uploadedImage" src="" alt="Uploaded Image">
+            <div id="zoomedImage">
+                <img id="zoomedImageContent" src="" alt="Zoomed Image">
+                <div id="crosshairs"></div>
+            </div>
+        </div>
+        <div id="infoContainer">
+            <p id="distanceOutput"></p>
+            <p id="ratioOutput"></p>
+            <p id="distanceInMMOutput"></p>
+            <button id="resetButton">Reset</button>
+        </div>
+    </div>
+    <script>
+        let clickCount = 0;
+        let points = [];
+        const knownDistanceMM = 51.39;
+
+        function clearMarkers() {
+            const markers = document.querySelectorAll('.marker');
+            markers.forEach(marker => marker.remove());
+        }
+
+        function resetMeasurements() {
+            clickCount = 0;
+            points = [];
+            document.getElementById('distanceOutput').innerText = '';
+            document.getElementById('ratioOutput').innerText = '';
+            document.getElementById('distanceInMMOutput').innerText = '';
+        }
+
+        document.getElementById('fileInput').addEventListener('change', function(event) {
+            const file = event.target.files[0];
+            if (file) {
+                const reader = new FileReader();
+                reader.onload = function(e) {
+                    const img = document.getElementById('uploadedImage');
+                    img.src = e.target.result;
+                    img.onload = function() {
+                        document.getElementById('zoomedImageContent').src = e.target.result;
+                        document.getElementById('imageContainer').style.display = 'block'; // Show the image container
+                        document.getElementById('resetButton').style.display = 'block'; // Show the reset button
+                        clearMarkers();
+                        resetMeasurements();
+                    };
+                };
+                reader.readAsDataURL(file);
+            }
+        });
+
+        document.getElementById('uploadedImage').addEventListener('mousemove', function(event) {
+            const zoomedImage = document.getElementById('zoomedImage');
+            const zoomedImageContent = document.getElementById('zoomedImageContent');
+            const img = event.target;
+            const rect = img.getBoundingClientRect();
+            const x = event.clientX - rect.left;
+            const y = event.clientY - rect.top;
+
+            const zoomFactor = 2;
+            const zoomWidth = zoomedImage.offsetWidth / zoomFactor;
+            const zoomHeight = zoomedImage.offsetHeight / zoomFactor;
+
+            zoomedImage.style.display = 'block';
+            zoomedImage.style.left = `${event.clientX + 10}px`;
+            zoomedImage.style.top = `${event.clientY + 10}px`;
+
+            zoomedImageContent.style.width = `${img.width * zoomFactor}px`;
+            zoomedImageContent.style.height = `${img.height * zoomFactor}px`;
+            zoomedImageContent.style.left = `-${x * zoomFactor - zoomWidth}px`;
+            zoomedImageContent.style.top = `-${y * zoomFactor - zoomHeight}px`;
+        });
+
+        document.getElementById('uploadedImage').addEventListener('mouseleave', function() {
+            document.getElementById('zoomedImage').style.display = 'none';
+        });
+
+        document.getElementById('uploadedImage').addEventListener('click', function(event) {
+            const img = event.target;
+            const rect = img.getBoundingClientRect();
+            const x = event.clientX - rect.left;
+            const y = event.clientY - rect.top;
+
+            points.push({ x, y });
+            clickCount++;
+
+            // Add marker
+            const marker = document.createElement('div');
+            marker.className = 'marker';
+            if (clickCount === 1) {
+                marker.classList.add('first');
+            }
+            marker.style.left = `${x}px`;
+            marker.style.top = `${y}px`;
+            document.getElementById('imageContainer').appendChild(marker);
+
+            if (clickCount === 2) {
+                const dx = points[1].x - points[0].x;
+                const dy = points[1].y - points[0].y;
+                const distance = Math.sqrt(dx * dx + dy * dy);
+                document.getElementById('distanceOutput').innerText = `Distance: ${distance.toFixed(2)} pixels`;
+            }
+
+            if (clickCount === 3) {
+                const dx1 = points[1].x - points[0].x;
+                const dy1 = points[1].y - points[0].y;
+                const distance1 = Math.sqrt(dx1 * dx1 + dy1 * dy1);
+
+                const dx2 = points[2].x - points[0].x;
+                const dy2 = points[2].y - points[0].y;
+                const distance2 = Math.sqrt(dx2 * dx2 + dy2 * dy2);
+
+                const ratio = distance2 / distance1;
+                document.getElementById('ratioOutput').innerText = `Ratio: ${ratio.toFixed(2)}`;
+
+                const distanceInMM = ratio * knownDistanceMM;
+                document.getElementById('distanceInMMOutput').innerText = `Distance from 1st to 3rd point: ${distanceInMM.toFixed(2)} mm`;
+            }
+
+            if (clickCount === 4) {
+                clearMarkers();
+                resetMeasurements();
+            }
+        });
+
+        document.getElementById('resetButton').addEventListener('click', function() {
+            clearMarkers();
+            resetMeasurements();
+        });
+    </script>
+</body>
+</html>
